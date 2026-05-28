@@ -11,6 +11,10 @@ const DOCUMENT_COUNT = 1000;
 const STATUSES = [DocumentStatus.DRAFT, DocumentStatus.PENDING, DocumentStatus.COMPLETED];
 
 export const seedDatabase = async () => {
+  if (process.env.TESTER_ENV === '1') {
+    return;
+  }
+
   const existingUser = await prisma.user.findFirst({
     where: {
       email: MEDIUM_ACCOUNT_EMAIL,

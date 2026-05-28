@@ -47,7 +47,7 @@ case "${1:-}" in
     npm ci
     docker compose -f "$COMPOSE_FILE" up -d
     npm run prisma:migrate-dev
-    npm run prisma:seed
+    TESTER_ENV=1 npm run prisma:seed
     npm run translate:compile
     npx turbo run dev --filter=@documenso/remix -- --host 0.0.0.0 >"$APP_LOG" 2>&1 &
     wait_http
