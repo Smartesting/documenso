@@ -3,8 +3,10 @@ set -euo pipefail
 
 SOURCE_DIR="${SOURCE_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 PORT="${PORT:-3100}"
-WEBAPP_URL="http://localhost:${PORT}"
-COMPOSE_FILE="$SOURCE_DIR/docker/development/compose.yml"
+WEBAPP_HOST="${WEBAPP_HOST:-$(hostname -I | awk '{print $1}')}"
+WEBAPP_URL="http://${WEBAPP_HOST}:${PORT}"
+COMPOSE_FILE="$SOURCE_DIR/docker/development/compose.tester-env.yml"
+APP_LOG="/tmp/tester-env-documenso-${PORT}.log"
 
 usage() {
   printf 'usage: %s {build|deploy|reset|seed|verify|status|logs|stop}\n' "$0" >&2
@@ -14,6 +16,8 @@ setup_env() {
   [ -f "$SOURCE_DIR/.env" ] || cp "$SOURCE_DIR/.env.example" "$SOURCE_DIR/.env"
   sed -i "s|^PORT=.*|PORT=${PORT}|" "$SOURCE_DIR/.env"
   sed -i "s|^NEXT_PUBLIC_WEBAPP_URL=.*|NEXT_PUBLIC_WEBAPP_URL=\"${WEBAPP_URL}\"|" "$SOURCE_DIR/.env"
+  sed -i "s|^NEXT_PRIVATE_INTERNAL_WEBAPP_URL=.*|NEXT_PRIVATE_INTERNAL_WEBAPP_URL=\"http://localhost:${PORT}\"|" "$SOURCE_DIR/.env"
+  sed -i "s|^NEXT_PRIVATE_UPLOAD_ENDPOINT=.*|NEXT_PRIVATE_UPLOAD_ENDPOINT=\"http://127.0.0.1:9006\"|" "$SOURCE_DIR/.env"
 }
 
 wait_http() {
@@ -35,13 +39,17 @@ PY
 
 case "${1:-}" in
   build)
-    setup_env
-    cd "$SOURCE_DIR"
-    npm run dx
+    echo "no build step needed — deploy handles full setup"
     ;;
   deploy)
+    setup_env
     cd "$SOURCE_DIR"
-    npx turbo run dev --filter=@documenso/remix -- --host 0.0.0.0 &
+    npm ci
+    docker compose -f "$COMPOSE_FILE" up -d
+    npm run prisma:migrate-dev
+    npm run prisma:seed
+    npm run translate:compile
+    npx turbo run dev --filter=@documenso/remix -- --host 0.0.0.0 >"$APP_LOG" 2>&1 &
     wait_http
     ;;
   reset)
@@ -65,7 +73,8 @@ PY
     docker compose -f "$COMPOSE_FILE" ps
     ;;
   logs)
-    docker compose -f "$COMPOSE_FILE" logs --tail=50
+    echo "=== app ===" && tail -50 "$APP_LOG" 2>/dev/null || true
+    echo "=== services ===" && docker compose -f "$COMPOSE_FILE" logs --tail=20
     ;;
   stop)
     cd "$SOURCE_DIR"
