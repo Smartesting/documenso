@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE_DIR="${SOURCE_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+PORT="${PORT:-3100}"
+WEBAPP_URL="http://localhost:${PORT}"
+COMPOSE_FILE="$SOURCE_DIR/docker/development/compose.yml"
+
+usage() {
+  printf 'usage: %s {build|deploy|reset|seed|verify|status|logs|stop}\n' "$0" >&2
+}
+
+setup_env() {
+  [ -f "$SOURCE_DIR/.env" ] || cp "$SOURCE_DIR/.env.example" "$SOURCE_DIR/.env"
+  sed -i "s|^PORT=.*|PORT=${PORT}|" "$SOURCE_DIR/.env"
+  sed -i "s|^NEXT_PUBLIC_WEBAPP_URL=.*|NEXT_PUBLIC_WEBAPP_URL=\"${WEBAPP_URL}\"|" "$SOURCE_DIR/.env"
+}
+
+wait_http() {
+  python3 - "$WEBAPP_URL" <<'PY'
+import sys, time, urllib.request
+url = sys.argv[1]
+last = None
+for _ in range(240):
+    try:
+        with urllib.request.urlopen(url, timeout=2) as r:
+            if r.status < 500:
+                sys.exit(0)
+    except Exception as exc:
+        last = exc
+    time.sleep(1)
+raise SystemExit(f"server did not become ready at {url}: {last}")
+PY
+}
+
+case "${1:-}" in
+  build)
+    setup_env
+    cd "$SOURCE_DIR"
+    npm run dx
+    ;;
+  deploy)
+    cd "$SOURCE_DIR"
+    npx turbo run dev --filter=@documenso/remix -- --host 0.0.0.0 &
+    wait_http
+    ;;
+  reset)
+    cd "$SOURCE_DIR"
+    docker compose -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+    ;;
+  seed)
+    echo "no seed needed — npm run dx handles migrations and initial seed"
+    ;;
+  verify)
+    wait_http
+    python3 - "$WEBAPP_URL" <<'PY'
+import sys, urllib.request
+url = sys.argv[1]
+with urllib.request.urlopen(url, timeout=10) as r:
+    assert r.status < 500, f"unexpected status {r.status}"
+print(f"verified app responding at {url}")
+PY
+    ;;
+  status)
+    docker compose -f "$COMPOSE_FILE" ps
+    ;;
+  logs)
+    docker compose -f "$COMPOSE_FILE" logs --tail=50
+    ;;
+  stop)
+    cd "$SOURCE_DIR"
+    docker compose -f "$COMPOSE_FILE" down 2>/dev/null || true
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
