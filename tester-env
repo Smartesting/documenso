@@ -15,7 +15,10 @@ usage() {
 setup_env() {
   [ -f "$SOURCE_DIR/.env" ] || cp "$SOURCE_DIR/.env.example" "$SOURCE_DIR/.env"
   sed -i "s|^PORT=.*|PORT=${PORT}|" "$SOURCE_DIR/.env"
-  sed -i "s|^NEXT_PUBLIC_WEBAPP_URL=.*|NEXT_PUBLIC_WEBAPP_URL=\"${WEBAPP_URL}\"|" "$SOURCE_DIR/.env"
+  # NEXT_PUBLIC_* values are inlined into browser code. The validation harness
+  # and browser MCP always reach the app via host.docker.internal, so the
+  # public webapp URL must match that origin or auth POSTs become cross-origin.
+  sed -i "s|^NEXT_PUBLIC_WEBAPP_URL=.*|NEXT_PUBLIC_WEBAPP_URL=\"http://host.docker.internal:${PORT}\"|" "$SOURCE_DIR/.env"
   sed -i "s|^NEXT_PRIVATE_INTERNAL_WEBAPP_URL=.*|NEXT_PRIVATE_INTERNAL_WEBAPP_URL=\"http://localhost:${PORT}\"|" "$SOURCE_DIR/.env"
   sed -i "s|^NEXT_PRIVATE_UPLOAD_ENDPOINT=.*|NEXT_PRIVATE_UPLOAD_ENDPOINT=\"http://127.0.0.1:9006\"|" "$SOURCE_DIR/.env"
 }

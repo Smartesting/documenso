@@ -38,9 +38,10 @@ Run with `TESTER_ENV=1` flag to produce deterministic data including admin user 
 
 ### Browser Smoke
 
-- Admin login at `http://<host>:3100/signin`
+- Admin login at `http://host.docker.internal:3100/signin` (browser MCP containers reach the app via host.docker.internal; NEXT_PUBLIC_WEBAPP_URL is set to this origin so auth requests stay same-origin)
+- Host-side health checks use `http://localhost:3100` (host.docker.internal does not resolve on the host)
 - Seed populates templates, documents, and team data visible on dashboard
-- Mail preview available at `http://<host>:9005` (Inbucket)
+- Mail preview available at `http://host.docker.internal:9005` (Inbucket)
 
 ## Reset Path
 
